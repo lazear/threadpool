@@ -96,16 +96,16 @@ impl Worker {
         let thread = thread::spawn(move || {
             
             loop {
-                // We use Mutex::try_lock() because it does not block
-                // Blocking here will keep one thread doing most of the work
-                // for short functions
-                if let Ok(message) = receiver.try_lock() {
-                    if let Ok(message) = message.recv() {
-                        match message {
-                            Message::Work(x) => x.call(),
-                            Message::Terminate => break, 
-                        }
-                    }
+                // Block and wait for lock
+                let message = {
+                    let lk = receiver.lock().unwrap();
+                    lk.recv()
+                };
+
+                match message {
+                    Ok(Message::Work(x)) => x.call(),
+                    Ok(Message::Terminate) => break,
+                    Err(_) => break,
                 }
             }
         });
@@ -126,7 +126,7 @@ mod tests {
         let pool = ThreadPool::new(4);
         let count = Arc::new(Mutex::new(0));
 
-        for i in 0..20 {
+        for i in 0..200 {
             let mut data = count.clone();
 
             // Share a mutex to mutable data, increment the value by 1     
@@ -143,6 +143,6 @@ mod tests {
         // wait for all jobs to finish
         drop(pool);
         // Make sure that all threads completed
-        assert_eq!(*count.lock().unwrap(), 20);
+        assert_eq!(*count.lock().unwrap(), 200);
     }
 }
